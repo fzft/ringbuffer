@@ -4,6 +4,7 @@ use std::mem::MaybeUninit;
 use std::slice;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use crossbeam_utils::CachePadded;
 
 use crate::base::{RbBase, RbRead, RbWrite};
 use crate::consumer::Consumer;
@@ -12,8 +13,9 @@ use crate::producer::Producer;
 pub struct SharedRb<T, const N: usize>
 {
     buffer: UnsafeCell<[MaybeUninit<T>; N]>,
-    head: AtomicUsize,
-    tail: AtomicUsize,
+    // prevent share false
+    head: CachePadded<AtomicUsize>,
+    tail: CachePadded<AtomicUsize>,
     count: AtomicUsize,
 }
 
@@ -22,8 +24,8 @@ impl<T, const N: usize> SharedRb<T, N>
 {
     pub fn new() -> Self {
         Self {
-            head: AtomicUsize::new(0),
-            tail: AtomicUsize::new(0),
+            head: CachePadded::new(AtomicUsize::new(0))  ,
+            tail: CachePadded::new(AtomicUsize::new(0)),
             count: AtomicUsize::new(0),
             buffer: UnsafeCell::new(uninit_array()),
         }

@@ -7,3 +7,5 @@ edition = "2021"
 
 [dependencies]
 haphazard = "0.1.5"
+crossbeam-utils = { version = "0.8", default-features = false }
+
