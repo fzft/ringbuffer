@@ -1,4 +1,4 @@
-use std::io;
+use std::{io, mem};
 use std::io::Read;
 use std::marker::PhantomData;
 use std::mem::MaybeUninit;
@@ -27,6 +27,10 @@ impl<T, R: RbRef> Producer<T, R>
         self.inner.cap()
     }
 
+    pub fn count(&self) -> usize {
+        self.inner.count()
+    }
+
     pub fn is_full(&self) -> bool {
         self.inner.is_full()
     }
@@ -39,9 +43,40 @@ impl<T, R: RbRef> Producer<T, R>
         self.inner.advance_head(count)
     }
 
+    pub fn vacant_slices(&mut self) -> (&mut [MaybeUninit<T>], &mut [MaybeUninit<T>]) {
+        unsafe { self.inner.vacant_slices() }
+    }
+
+    pub fn push_slice(&mut self, elems: &[T]) -> usize
+        where T: Copy
+    {
+        let (left, right) = self.vacant_slices();
+        let count = if left.len() > elems.len() {
+            let uninit_src = unsafe { mem::transmute(elems) };
+            left[..elems.len()].copy_from_slice(uninit_src);
+            elems.len()
+        } else {
+            let (left_elems, elems) = elems.split_at(left.len());
+            let uninit_src = unsafe { mem::transmute(left_elems) };
+            left.copy_from_slice(uninit_src);
+            left.len() + if right.len() > elems.len() {
+                let uninit_src = unsafe { mem::transmute(elems) };
+                right[..elems.len()].copy_from_slice(uninit_src);
+                elems.len()
+            } else {
+                let uninit_src = unsafe { mem::transmute(&elems[..right.len()]) };
+                right.copy_from_slice(uninit_src);
+                right.len()
+            }
+        };
+        let _ = self.advance(count);
+        count
+    }
+
     pub fn read_from<P: Read>(&mut self, reader: &mut P) -> io::Result<usize> {
         let left = unsafe { self.inner.vacant_slices().0 };
-        let init_ref = unsafe { &mut*(left as *mut [MaybeUninit<T>] as *mut [T] as *mut [u8]) };
+        eprintln!("left count: {}", left.len());
+        let init_ref = unsafe { &mut *(left as *mut [MaybeUninit<T>] as *mut [T] as *mut [u8]) };
         let read_count = reader.read(init_ref)?;
         let _ = self.advance(read_count);
         Ok(read_count)

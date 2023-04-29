@@ -1,4 +1,3 @@
-use std::f32::consts::E;
 use std::mem::MaybeUninit;
 use std::ops::{Deref, Range};
 use std::sync::Arc;
@@ -11,34 +10,25 @@ pub trait RbBase<T>
 
     fn tail(&self) -> usize;
 
+    fn count(&self) -> usize;
+
     fn is_full(&self) -> bool {
-        self.free_len() == 0
+        self.count() == self.cap()
     }
 
     fn is_empty(&self) -> bool {
-        self.head() == self.tail()
+       self.count() == 0
     }
 
     fn occupied_len(&self) -> usize {
-        return if self.is_empty() {
-            0
-        } else {
-            (self.head() + self.cap() - self.tail()) % self.cap()
-        };
+        self.count()
     }
 
     fn free_len(&self) -> usize {
-        eprintln!("--------");
-        eprintln!("cap: {}", self.cap());
-        eprintln!("tail: {}", self.tail());
-        eprintln!("head: {}", self.head());
-        eprintln!("--------");
-        if self.is_empty() {
-            return self.cap();
-        } else {
-            (self.cap() + self.tail() - self.head() - 1) % self.cap()
-        }
+        self.cap() - self.count()
     }
+
+    fn set_count(&self, value: usize);
 }
 
 
@@ -52,6 +42,7 @@ pub trait RbRead<T>: RbBase<T>
         }
         let new_tail = (self.tail() + count) % self.cap();
         self.set_tail(new_tail);
+        self.set_count(self.count() - count);
         Ok(())
     }
 
@@ -60,9 +51,9 @@ pub trait RbRead<T>: RbBase<T>
     fn occupied_range(&self) -> (Range<usize>, Range<usize>) {
         let head = self.head();
         let tail = self.tail();
+        let count = self.count();
         let cap = self.cap();
-        let occupied_len = self.occupied_len();
-        if occupied_len == 0 {
+        if count == 0 {
             ((0..0), (0..0))
         } else if head > tail {
             ((tail..head), (0..0))
@@ -83,20 +74,27 @@ pub trait RbWrite<T>: RbBase<T> {
         let new_head = (self.head() + count) % self.cap();
         eprintln!("new head: {}", new_head);
         self.set_head(new_head);
+        self.set_count(self.count() + count);
         Ok(())
     }
 
     fn vacant_range(&self) -> (Range<usize>, Range<usize>) {
         let head = self.head();
         let tail = self.tail();
+        let count = self.count();
         let cap = self.cap();
-        let vacant = self.free_len();
-        if vacant == 0 {
+        if count == 0 && head == 0 && tail ==0 {
+            // Buffer is empty
+            (0..cap, 0..0)
+        } else if count == cap {
+            // Buffer is full
             (0..0, 0..0)
-        } else if head <= tail {
-            ((head..tail), (0..0))
+        } else if head >= tail {
+            // Contiguous vacant range
+            (head..cap, 0..tail)
         } else {
-            ((head..cap), (0..tail))
+            // Two vacant ranges
+            (head..tail, 0..0)
         }
     }
 

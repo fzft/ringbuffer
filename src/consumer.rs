@@ -1,5 +1,5 @@
+use std::{io, mem};
 use std::fmt::{Debug, Display};
-use std::io;
 use std::io::{Read, Write};
 use std::marker::PhantomData;
 use std::mem::MaybeUninit;
@@ -48,6 +48,37 @@ impl<T, R: RbRef> Consumer<T, R>
         let write_count = writer.write(init_ref)?;
         let _ = self.advance(write_count);
         Ok(write_count)
+    }
+
+    pub fn occupied_slices(&self) -> (&[MaybeUninit<T>], &[MaybeUninit<T>]) {
+        unsafe { self.inner.occupied_slices() }
+    }
+
+    pub fn pop_slice(&self, elems: &mut [T]) -> usize
+        where T: Copy
+    {
+        let (left, right) = self.occupied_slices();
+        let count = if elems.len() < left.len() {
+            let uninit_src = unsafe { &*(&left[..elems.len()] as *const [MaybeUninit<T>] as *const [T]) };
+            elems.copy_from_slice(uninit_src);
+            elems.len()
+        } else {
+            let (left_elems, elems) = elems.split_at_mut(left.len());
+            let uninit_src = unsafe { &*(left as *const [MaybeUninit<T>] as *const [T]) };
+            left_elems.copy_from_slice(uninit_src);
+            left.len()
+                + if right.len() < elems.len() {
+                let uninit_src = unsafe { &*(right as *const [MaybeUninit<T>] as *const [T]) };
+                elems[..right.len()].copy_from_slice(uninit_src);
+                right.len()
+            } else {
+                let uninit_src = unsafe { &*(right.split_at(elems.len()).0 as *const [MaybeUninit<T>] as *const [T]) };
+                elems.copy_from_slice(uninit_src);
+                elems.len()
+            }
+        };
+        let _ = self.advance(count);
+        count
     }
 
     pub fn pop(&self) -> Option<T> {

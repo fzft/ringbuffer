@@ -21,7 +21,7 @@ mod tests {
     #[test]
     fn test_rb_base() {
         let db = SharedRb::<u32, 10>::new();
-        let (mut pro, mut con) = db.split();
+        let (mut pro, con) = db.split();
         let _ = pro.push(34);
         let ele = con.pop();
         assert_eq!(34, ele.unwrap())
@@ -47,7 +47,7 @@ mod tests {
     #[test]
     fn test_rb_base_full_push() {
         let db = SharedRb::<u32, 3>::new();
-        let (mut pro, mut con) = db.split();
+        let (mut pro, con) = db.split();
         let _ = pro.push(1);
         let _ = pro.push(2);
         let result = pro.push(3);
@@ -65,7 +65,7 @@ mod tests {
     #[test]
     fn test_rb_base_empty_pop() {
         let db = SharedRb::<u32, 3>::new();
-        let (mut pro, mut con) = db.split();
+        let (mut pro, con) = db.split();
         let _ = pro.push(1);
         let _ = pro.push(2);
 
@@ -84,9 +84,162 @@ mod tests {
     }
 
     #[test]
+    fn test_rb_vacant_range() {
+        let db = SharedRb::<u8, 5>::new();
+        let (mut pro, con) = db.split();
+
+        assert_eq!(pro.cap(), 5);
+        assert_eq!(pro.count(), 0);
+
+        assert_eq!(pro.vacant_slices().0.len(), 5);
+        assert_eq!(pro.vacant_slices().1.len(), 0);
+        assert_eq!(con.occupied_slices().0.len(), 0);
+        assert_eq!(con.occupied_slices().1.len(), 0);
+
+        // [tail, head, 0, 0, 0]
+        // [1, 5] [0, 0]
+        // [0, 1] [0, 0]
+        let _ = pro.push(1);
+        assert_eq!(pro.vacant_slices().0.len(), 4);
+        assert_eq!(pro.vacant_slices().1.len(), 0);
+        assert_eq!(con.occupied_slices().0.len(), 1);
+        assert_eq!(con.occupied_slices().1.len(), 0);
+
+        // [tail, 0, head, 0, 0]
+        // [2, 5] [0, 0]
+        // [0,2] [0,0]
+        let _ = pro.push(1);
+        assert_eq!(pro.vacant_slices().0.len(), 3);
+        assert_eq!(pro.vacant_slices().1.len(), 0);
+        assert_eq!(con.occupied_slices().0.len(), 2);
+        assert_eq!(con.occupied_slices().1.len(), 0);
+
+        // [0, tail, head, 0, 0]
+        // [2,5] [0,1]
+        // [1,2] [0,0]
+        con.pop();
+        assert_eq!(pro.vacant_slices().0.len(), 3);
+        assert_eq!(pro.vacant_slices().1.len(), 1);
+        assert_eq!(con.occupied_slices().0.len(), 1);
+        assert_eq!(con.occupied_slices().1.len(), 0);
+
+        // [0, 0, head-tail, 0, 0]
+        // [2, 5] [0,2]
+        // [0,0] [0,0]
+        con.pop();
+        assert_eq!(pro.vacant_slices().0.len(), 3);
+        assert_eq!(pro.vacant_slices().1.len(), 2);
+        assert_eq!(con.occupied_slices().0.len(), 0);
+        assert_eq!(con.occupied_slices().1.len(), 0);
+
+
+        // [0, 0, tail, head, 0]
+        // [3, 5] [0,2]
+        // [2, 3] [0,0]
+        let _ = pro.push(1);
+        assert_eq!(pro.vacant_slices().0.len(), 2);
+        assert_eq!(pro.vacant_slices().1.len(), 2);
+        assert_eq!(con.occupied_slices().0.len(), 1);
+        assert_eq!(con.occupied_slices().1.len(), 0);
+
+        // [0, 0, tail, 0, head]
+        // [4, 5] [0,2]
+        // [2,4] [0,0]
+        let _ = pro.push(1);
+        assert_eq!(pro.vacant_slices().0.len(), 1);
+        assert_eq!(pro.vacant_slices().1.len(), 2);
+        assert_eq!(con.occupied_slices().0.len(), 2);
+        assert_eq!(con.occupied_slices().1.len(), 0);
+
+        eprintln!("is_full:{}", pro.is_full());
+
+        // [head, 0, tail, 0, 0]
+        // [0, 2] [0, 0]
+        // [2, 5]
+        let _ = pro.push(1);
+        assert_eq!(pro.vacant_slices().0.len(), 2);
+        assert_eq!(pro.vacant_slices().1.len(), 0);
+        assert_eq!(con.occupied_slices().0.len(), 3);
+        assert_eq!(con.occupied_slices().1.len(), 0);
+    }
+
+    #[test]
+    fn test_rb_slice_op() {
+        let db = SharedRb::<u8, 10>::new();
+        let (mut pro, con) = db.split();
+
+        let v1 = vec![0, 1, 2, 3, 4];
+        pro.push_slice(&v1);
+
+        let mut v2: [u8; 3] = [0; 3];
+        con.pop_slice(&mut v2);
+
+        assert_eq!([0, 1, 2], v2)
+    }
+
+    #[test]
+    fn test_rb_slice_op2() {
+        let db = SharedRb::<u8, 10>::new();
+        let (mut pro, con) = db.split();
+
+        let v1 = vec![0, 1, 2, 3, 4];
+        pro.push_slice(&v1);
+
+        let mut v2: [u8; 6] = [0; 6];
+        con.pop_slice(&mut v2);
+
+        eprintln!("{:?}", v2)
+    }
+
+    #[test]
+    fn test_rb_slice_op3() {
+        let db = SharedRb::<u8, 10>::new();
+        let (mut pro, con) = db.split();
+
+        let _ = pro.push(1);
+        let _ = pro.push(1);
+        let _ = pro.push(1);
+        let _ = pro.push(1);
+        let _ = pro.push(1);
+        let _ = pro.push(1);
+        let _ = pro.push(1);
+        let _ = pro.push(1);
+
+        con.pop();
+        con.pop();
+        con.pop();
+        con.pop();
+        con.pop();
+        con.pop();
+        con.pop();
+        con.pop();
+
+        let v1 = vec![0, 1, 2, 3, 4];
+        pro.push_slice(&v1);
+
+        let mut v2: [u8; 6] = [0; 6];
+        con.pop_slice(&mut v2);
+
+        eprintln!("{:?}", v2)
+    }
+
+    #[test]
+    fn test_rb_read_and_write() {
+        let db = SharedRb::<u8, 1024>::new();
+        let (mut pro, con) = db.split();
+        let smsg = "The quick brown fox jumps over the lazy dog";
+        let zero = [0];
+        let mut bytes = smsg.as_bytes().chain(&zero[..]);
+        let n = pro.read_from(&mut bytes).unwrap();
+
+
+        eprintln!("{}", n)
+    }
+
+    #[test]
     fn test_rb_concurrent() {
         let db = SharedRb::<u8, 10>::new();
-        let (mut pro, mut con) = db.split();
+        let (mut pro, con) = db.split();
 
         let smsg = "The quick brown fox jumps over the lazy dog";
 
@@ -116,7 +269,7 @@ mod tests {
             loop {
                 if con.is_empty() {
                     if bytes.ends_with(&[0]) {
-                        break
+                        break;
                     }
                     dbg!("buffer is empty, waiting");
                     thread::sleep(Duration::from_millis(100));

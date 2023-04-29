@@ -14,6 +14,7 @@ pub struct SharedRb<T, const N: usize>
     buffer: UnsafeCell<[MaybeUninit<T>; N]>,
     head: AtomicUsize,
     tail: AtomicUsize,
+    count: AtomicUsize,
 }
 
 impl<T, const N: usize> SharedRb<T, N>
@@ -23,6 +24,7 @@ impl<T, const N: usize> SharedRb<T, N>
         Self {
             head: AtomicUsize::new(0),
             tail: AtomicUsize::new(0),
+            count: AtomicUsize::new(0),
             buffer: UnsafeCell::new(uninit_array()),
         }
     }
@@ -37,7 +39,7 @@ impl<T, const N: usize> SharedRb<T, N>
 impl<T, const N: usize> RbBase<T> for SharedRb<T, N>
 {
     fn cap(&self) -> usize {
-        N + 1
+        N
     }
 
     fn head(&self) -> usize {
@@ -46,6 +48,13 @@ impl<T, const N: usize> RbBase<T> for SharedRb<T, N>
 
     fn tail(&self) -> usize {
         self.tail.load(Ordering::Acquire)
+    }
+
+    fn count(&self) -> usize {
+        self.count.load(Ordering::Acquire)    }
+
+    fn set_count(&self, value: usize) {
+        self.count.store(value, Ordering::Release)
     }
 }
 
